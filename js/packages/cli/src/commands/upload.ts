@@ -94,6 +94,7 @@ export async function upload(
     }
     uploadSuccessful = (await Promise.all(promises)).every(x => x);
     saveCache(cacheName, env, cacheContent);
+    config = cacheContent.program.config;
     i += batch_size;
 }
 
