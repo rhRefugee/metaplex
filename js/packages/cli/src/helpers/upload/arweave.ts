@@ -19,8 +19,8 @@ async function fetchAssetCostToStore(fileSizes: number[]) {
   return result.solana * anchor.web3.LAMPORTS_PER_SOL;
 }
 
-async function upload(data: FormData, manifest, index) {
-  log.debug(`trying to upload ${index}.png: ${manifest.name}`);
+async function upload(data: FormData, manifest) {
+  log.debug(`trying to upload ${manifest.name}`);
   return await (
     await fetch(ARWEAVE_UPLOAD_ENDPOINT, {
       method: 'POST',
@@ -61,7 +61,6 @@ export async function arweaveUpload(
   image,
   manifestBuffer, // TODO rename metadataBuffer
   manifest, // TODO rename metadata
-  index,
 ) {
   const fsStat = await stat(image);
   const estimatedManifestSize = estimateManifestSize([
@@ -101,7 +100,7 @@ export async function arweaveUpload(
   });
   data.append('file[]', manifestBuffer, 'metadata.json');
 
-  const result = await upload(data, manifest, index);
+  const result = await upload(data, manifest);
 
   const metadataFile = result.messages?.find(
     m => m.filename === 'manifest.json',
@@ -113,6 +112,6 @@ export async function arweaveUpload(
     return link;
   } else {
     // @todo improve
-    throw new Error(`No transaction ID for upload: ${index}`);
+    throw new Error(`No transaction ID for upload: ${image}`);
   }
 }
