@@ -81,8 +81,8 @@ async function initConfig(
   }
 }
 
-function getItemManifest(item) {
-  const manifestPath = `${item}.json`;
+function getItemManifest(dirname, item) {
+  const manifestPath = path.join(dirname, `${item}.json`);
   return JSON.parse(fs.readFileSync(manifestPath).toString());
 }
 
@@ -150,8 +150,7 @@ async function writeIndices({
                 saveCache(cacheName, env, cache);
               } catch (err) {
                 log.error(
-                  `saving config line ${ind}-${
-                    keys[indexes[indexes.length - 1]]
+                  `saving config line ${ind}-${keys[indexes[indexes.length - 1]]
                   } failed`,
                   err,
                 );
@@ -222,10 +221,9 @@ export async function upload({
 
       saveManifestsWithLink(cache, updatedManifests, manifestLinks);
       saveCache(cacheName, env, cache);
-      return;
     } else {
       for (const toUpload of needUpload) {
-        const manifest = getItemManifest(toUpload);
+        const manifest = getItemManifest(dirname, toUpload);
         const manifestBuffer = Buffer.from(JSON.stringify(manifest));
 
         log.debug(`Processing file: ${toUpload}`);
@@ -258,21 +256,21 @@ export async function upload({
     properties: { creators },
     seller_fee_basis_points: sellerFeeBasisPoints,
     symbol,
-  } = getItemManifest(needUpload[0]);
+  } = getItemManifest(dirname, needUpload);
 
   const config = cachedProgram.config
     ? new PublicKey(cachedProgram.config)
     : initConfig(anchorProgram, walletKeyPair, {
-        totalNFTs,
-        mutable,
-        retainAuthority,
-        sellerFeeBasisPoints,
-        symbol,
-        creators,
-        env,
-        cache,
-        cacheName,
-      });
+      totalNFTs,
+      mutable,
+      retainAuthority,
+      sellerFeeBasisPoints,
+      symbol,
+      creators,
+      env,
+      cache,
+      cacheName,
+    });
 
   return writeIndices({
     anchorProgram,
