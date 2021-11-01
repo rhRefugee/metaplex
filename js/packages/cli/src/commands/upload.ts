@@ -103,7 +103,8 @@ export async function upload(
         ),
       );
     }
-    uploadSuccessful = (await Promise.allSettled(promises)).every(x => x);
+    uploadSuccessful =
+      (await Promise.all(promises)).every(x => x) && uploadSuccessful;
     saveCache(cacheName, env, cacheContent);
     config = cacheContent.program.config;
     currentBatchStartIndex += BATCH_SIZE[storage];
