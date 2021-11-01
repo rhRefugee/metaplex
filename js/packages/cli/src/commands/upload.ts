@@ -256,7 +256,10 @@ export async function upload({
     properties: { creators },
     seller_fee_basis_points: sellerFeeBasisPoints,
     symbol,
-  } = getItemManifest(dirname, needUpload);
+  } = getItemManifest(dirname, needUpload[0]);
+
+  walletKeyPair = loadWalletKey(keypair);
+  anchorProgram = await loadCandyProgram(walletKeyPair, env, rpcUrl);
 
   const config = cachedProgram.config
     ? new PublicKey(cachedProgram.config)
