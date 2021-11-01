@@ -169,7 +169,7 @@ async function writeIndices({
 
 function saveManifestsWithLink(cache, manifests, links) {
   manifests.forEach((manifest, idx) => {
-    cache.items[manifest.name] = {
+    cache.items[idx] = {
       link: links[idx],
       name: manifest.name,
       onChain: false,
