@@ -263,7 +263,7 @@ export async function upload({
 
   const config = cachedProgram.config
     ? new PublicKey(cachedProgram.config)
-    : initConfig(anchorProgram, walletKeyPair, {
+    : await initConfig(anchorProgram, walletKeyPair, {
       totalNFTs,
       mutable,
       retainAuthority,
