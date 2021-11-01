@@ -15,6 +15,8 @@ import { arweaveUpload } from '../helpers/upload/arweave';
 import { ipfsCreds, ipfsUpload } from '../helpers/upload/ipfs';
 import { chunks } from '../helpers/various';
 
+const BATCH_SIZE = { arweave: 5, ipfs: 1, aws: 1 };
+
 export async function upload(
   files: string[],
   cacheName: string,
@@ -70,14 +72,22 @@ export async function upload(
     ? new PublicKey(cacheContent.program.config)
     : undefined;
 
-    
-  const batch_size = 5;
-  let i = 0;
-  while( i < images.length){
-    console.log('Upload for : ', i, ' to ', i + batch_size)
+  let currentBatchStartIndex = 0;
+  while (currentBatchStartIndex < SIZE) {
+    console.log(
+      `Upload for : ${currentBatchStartIndex} to ${Math.min(
+        currentBatchStartIndex + BATCH_SIZE[storage],
+        SIZE,
+      )}`,
+    );
     let promises = [];
-    for (let j = i; j < Math.min(i + batch_size,images.length); j++) {
-        promises.push(upload_one_item(
+    for (
+      let i = currentBatchStartIndex;
+      i < Math.min(currentBatchStartIndex + BATCH_SIZE[storage], SIZE);
+      i++
+    ) {
+      promises.push(
+        upload_one_item(
           env,
           totalNFTs,
           storage,
@@ -85,19 +95,19 @@ export async function upload(
           mutable,
           ipfsCredentials,
           awsS3Bucket,
-          images,
-          j ,
-          cacheContent ,
-          anchorProgram ,
-          walletKeyPair , 
-        ));   
+          images[i],
+          i,
+          cacheContent,
+          anchorProgram,
+          walletKeyPair,
+        ),
+      );
     }
-    uploadSuccessful = (await Promise.all(promises)).every(x => x);
+    uploadSuccessful = (await Promise.allSettled(promises)).every(x => x);
     saveCache(cacheName, env, cacheContent);
     config = cacheContent.program.config;
-    i += batch_size;
-}
-
+    currentBatchStartIndex += BATCH_SIZE[storage];
+  }
 
   const keys = Object.keys(cacheContent.items);
   try {
@@ -173,97 +183,93 @@ async function upload_one_item(
   mutable: boolean,
   ipfsCredentials: ipfsCreds,
   awsS3Bucket: string,
-  images : any[],
-  i : number,
-  cacheContent ,
-  anchorProgram ,
-  walletKeyPair , 
-  
-){
+  image: string,
+  i: number,
+  cacheContent,
+  anchorProgram,
+  walletKeyPair,
+) {
   let uploadSuccessful = true;
-  const image = images[i];
-    const imageName = path.basename(image);
-    const index = imageName.replace(EXTENSION_PNG, '');
+  const imageName = path.basename(image);
+  const index = imageName.replace(EXTENSION_PNG, '');
 
-    if (i % 50 === 0) {
-      log.info(`Processing file: ${i}`);
-    } else {
-      log.debug(`Processing file: ${i}`);
-    }
+  if (i % 50 === 0) {
+    log.info(`Processing file: ${i}`);
+  } else {
+    log.debug(`Processing file: ${i}`);
+  }
 
-    let link = cacheContent?.items?.[index]?.link;
-    if (!link || !cacheContent.program.uuid) {
-      const manifestPath = image.replace(EXTENSION_PNG, '.json');
-      const manifestContent = fs
-        .readFileSync(manifestPath)
-        .toString()
-        .replace(imageName, 'image.png')
-        .replace(imageName, 'image.png');
-      const manifest = JSON.parse(manifestContent);
+  let link = cacheContent?.items?.[index]?.link;
+  if (!link || !cacheContent.program.uuid) {
+    const manifestPath = image.replace(EXTENSION_PNG, '.json');
+    const manifestContent = fs
+      .readFileSync(manifestPath)
+      .toString()
+      .replace(imageName, 'image.png')
+      .replace(imageName, 'image.png');
+    const manifest = JSON.parse(manifestContent);
 
-      const manifestBuffer = Buffer.from(JSON.stringify(manifest));
+    const manifestBuffer = Buffer.from(JSON.stringify(manifest));
 
-      if (i === 0 && !cacheContent.program.uuid) {
-        // initialize config
-        log.info(`initializing config`);
-        try {
-          const res = await createConfig(anchorProgram, walletKeyPair, {
-            maxNumberOfLines: new BN(totalNFTs),
-            symbol: manifest.symbol,
-            sellerFeeBasisPoints: manifest.seller_fee_basis_points,
-            isMutable: mutable,
-            maxSupply: new BN(0),
-            retainAuthority: retainAuthority,
-            creators: manifest.properties.creators.map(creator => {
-              return {
-                address: new PublicKey(creator.address),
-                verified: true,
-                share: creator.share,
-              };
-            }),
-          });
-          cacheContent.program.uuid = res.uuid;
-          cacheContent.program.config = res.config.toBase58();
-
-
-        } catch (exx) {
-          log.error('Error deploying config to Solana network.', exx);
-          throw exx;
-        }
-      }
-
-      if (!link) {
-        try {
-          if (storage === 'arweave') {
-            link = await arweaveUpload(
-              walletKeyPair,
-              anchorProgram,
-              env,
-              image,
-              manifestBuffer,
-              manifest,
-              index,
-            );
-          } else if (storage === 'ipfs') {
-            link = await ipfsUpload(ipfsCredentials, image, manifestBuffer);
-          } else if (storage === 'aws') {
-            link = await awsUpload(awsS3Bucket, image, manifestBuffer);
-          }
-
-          if (link) {
-            log.debug('setting cache for ', index);
-            cacheContent.items[index] = {
-              link,
-              name: manifest.name,
-              onChain: false,
+    if (i === 0 && !cacheContent.program.uuid) {
+      // initialize config
+      log.info(`initializing config`);
+      try {
+        const res = await createConfig(anchorProgram, walletKeyPair, {
+          maxNumberOfLines: new BN(totalNFTs),
+          symbol: manifest.symbol,
+          sellerFeeBasisPoints: manifest.seller_fee_basis_points,
+          isMutable: mutable,
+          maxSupply: new BN(0),
+          retainAuthority: retainAuthority,
+          creators: manifest.properties.creators.map(creator => {
+            return {
+              address: new PublicKey(creator.address),
+              verified: true,
+              share: creator.share,
             };
-            cacheContent.authority = walletKeyPair.publicKey.toBase58();
-          }
-        } catch (er) {
-          uploadSuccessful = false;
-          log.error(`Error uploading file ${index}`, er);
-        }
+          }),
+        });
+        cacheContent.program.uuid = res.uuid;
+        cacheContent.program.config = res.config.toBase58();
+      } catch (exx) {
+        log.error('Error deploying config to Solana network.', exx);
+        throw exx;
       }
     }
-    return uploadSuccessful;
+
+    if (!link) {
+      try {
+        if (storage === 'arweave') {
+          link = await arweaveUpload(
+            walletKeyPair,
+            anchorProgram,
+            env,
+            image,
+            manifestBuffer,
+            manifest,
+            index,
+          );
+        } else if (storage === 'ipfs') {
+          link = await ipfsUpload(ipfsCredentials, image, manifestBuffer);
+        } else if (storage === 'aws') {
+          link = await awsUpload(awsS3Bucket, image, manifestBuffer);
+        }
+
+        if (link) {
+          log.debug('setting cache for ', index);
+          cacheContent.items[index] = {
+            link,
+            name: manifest.name,
+            onChain: false,
+          };
+          cacheContent.authority = walletKeyPair.publicKey.toBase58();
+        }
+      } catch (er) {
+        uploadSuccessful = false;
+        log.error(`Error uploading file ${index}`, er);
+      }
+    }
+  }
+  return uploadSuccessful;
 }
