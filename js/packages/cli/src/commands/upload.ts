@@ -80,7 +80,7 @@ export async function upload(
         SIZE,
       )}`,
     );
-    let promises = [];
+    const promises = [];
     for (
       let i = currentBatchStartIndex;
       i < Math.min(currentBatchStartIndex + BATCH_SIZE[storage], SIZE);
