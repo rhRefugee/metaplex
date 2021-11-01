@@ -13,7 +13,8 @@ import {
 } from '../helpers/accounts';
 import { loadCache, saveCache } from '../helpers/cache';
 import { arweaveUpload } from '../helpers/upload/arweave';
-import { nativeArweaveUpload } from '../helpers/upload/arweave-native';
+// import { nativeArweaveUpload } from '../helpers/upload/arweave-native';
+import { arweaveBundleUpload } from '../helpers/upload/arweave-bundle';
 import { awsUpload } from '../helpers/upload/aws';
 import { ipfsCreds, ipfsUpload } from '../helpers/upload/ipfs';
 import { StorageType } from '../helpers/storage-type';
@@ -167,7 +168,18 @@ async function writeIndices({
   }
 }
 
-export async function _upload({
+function saveManifestsWithLink(cache, manifests, links) {
+  manifests.forEach((manifest, idx) => {
+    cache.items[manifest.name] = {
+      link: links[idx],
+      name: manifest.name,
+      onChain: false,
+    };
+  }, {});
+  return cache;
+}
+
+export async function upload({
   files,
   cacheName,
   env,
@@ -185,44 +197,59 @@ export async function _upload({
   const cachedProgram = (cache.program = cache.program || {});
   const cachedItems = (cache.items = cache.items || {});
 
+  const dirname = path.dirname(files[0]);
   const needUpload = getItemsNeedingUpload(cachedItems, files);
 
   let walletKeyPair;
   let anchorProgram;
 
   if (needUpload.length) {
-    for (const toUpload of needUpload) {
-      const manifest = getItemManifest(toUpload);
-      const manifestBuffer = Buffer.from(JSON.stringify(manifest));
+    if (storage === StorageType.ArweaveNative) {
+      const bundleUploads = await arweaveBundleUpload(
+        dirname,
+        needUpload,
+        JSON.parse(fs.readFileSync(jwk).toString()),
+      );
 
-      log.debug(`Processing file: ${toUpload}`);
+      const { updatedManifests, manifestLinks } = bundleUploads.reduce(
+        (acc, [bundleManifests, bundleLinks]) => {
+          acc.updatedManifests.push(...bundleManifests);
+          acc.manifestLinks.push(...bundleLinks);
+          return acc;
+        },
+        { updatedManifests: [], manifestLinks: [] },
+      );
 
-      switch (storage) {
-        case StorageType.ArweaveNative:
-          await nativeArweaveUpload(
-            toUpload,
-            manifest,
-            JSON.parse(fs.readFileSync(jwk).toString()),
-          );
-          break;
-        case StorageType.Ipfs:
-          await ipfsUpload(ipfsCredentials, toUpload, manifestBuffer);
-          break;
-        case StorageType.Aws:
-          await awsUpload(awsS3Bucket, toUpload, manifestBuffer);
-          break;
-        case StorageType.Arweave:
-        default:
-          walletKeyPair = loadWalletKey(keypair);
-          anchorProgram = await loadCandyProgram(walletKeyPair, env, rpcUrl);
-          await arweaveUpload(
-            walletKeyPair,
-            anchorProgram,
-            env,
-            toUpload,
-            manifestBuffer,
-            manifest,
-          );
+      saveManifestsWithLink(cache, updatedManifests, manifestLinks);
+      saveCache(cacheName, env, cache);
+      return;
+    } else {
+      for (const toUpload of needUpload) {
+        const manifest = getItemManifest(toUpload);
+        const manifestBuffer = Buffer.from(JSON.stringify(manifest));
+
+        log.debug(`Processing file: ${toUpload}`);
+
+        switch (storage) {
+          case StorageType.Ipfs:
+            await ipfsUpload(ipfsCredentials, toUpload, manifestBuffer);
+            break;
+          case StorageType.Aws:
+            await awsUpload(awsS3Bucket, toUpload, manifestBuffer);
+            break;
+          case StorageType.Arweave:
+          default:
+            walletKeyPair = loadWalletKey(keypair);
+            anchorProgram = await loadCandyProgram(walletKeyPair, env, rpcUrl);
+            await arweaveUpload(
+              walletKeyPair,
+              anchorProgram,
+              env,
+              toUpload,
+              manifestBuffer,
+              manifest,
+            );
+        }
       }
     }
   }

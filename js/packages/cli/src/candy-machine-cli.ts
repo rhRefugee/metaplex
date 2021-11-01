@@ -156,14 +156,13 @@ programCommand('upload')
 
     const startMs = Date.now();
     log.info('started at: ' + startMs.toString());
-    let warn = false;
-    for (;;) {
-      const successful = await upload(
+    try {
+      await upload({
         files,
         cacheName,
         env,
         keypair,
-        elemCount,
+        totalNFTs: elemCount,
         storage,
         retainAuthority,
         mutable,
@@ -171,24 +170,16 @@ programCommand('upload')
         ipfsCredentials,
         awsS3Bucket,
         jwk,
-      );
-
-      if (successful) {
-        warn = false;
-        break;
-      } else {
-        warn = true;
-        log.warn('upload was not successful, rerunning');
-      }
+      });
+    } catch (err) {
+      log.warn('upload was not successful, please re-run.', err);
     }
+
     const endMs = Date.now();
     const timeTaken = new Date(endMs - startMs).toISOString().substr(11, 8);
     log.info(
       `ended at: ${new Date(endMs).toISOString()}. time taken: ${timeTaken}`,
     );
-    if (warn) {
-      log.info('not all images have been uploaded, rerun this step.');
-    }
   });
 
 programCommand('verify_token_metadata')
@@ -245,8 +236,8 @@ programCommand('verify')
             const thisSlice = config.data.slice(
               CONFIG_ARRAY_START + 4 + CONFIG_LINE_SIZE * allIndexesInSlice[i],
               CONFIG_ARRAY_START +
-                4 +
-                CONFIG_LINE_SIZE * (allIndexesInSlice[i] + 1),
+              4 +
+              CONFIG_LINE_SIZE * (allIndexesInSlice[i] + 1),
             );
             const name = fromUTF8Array([...thisSlice.slice(4, 36)]);
             const uri = fromUTF8Array([...thisSlice.slice(40, 240)]);
@@ -366,14 +357,12 @@ programCommand('verify')
     );
 
     log.info(
-      `uploaded (${lineCount.toNumber()}) out of (${
-        configData.data.maxNumberOfLines
+      `uploaded (${lineCount.toNumber()}) out of (${configData.data.maxNumberOfLines
       })`,
     );
     if (configData.data.maxNumberOfLines > lineCount.toNumber()) {
       throw new Error(
-        `predefined number of NFTs (${
-          configData.data.maxNumberOfLines
+        `predefined number of NFTs (${configData.data.maxNumberOfLines
         }) is smaller than the uploaded one (${lineCount.toNumber()})`,
       );
     } else {
@@ -483,7 +472,7 @@ programCommand('show')
         //@ts-ignore
         machine.data.goLiveDate
           ? //@ts-ignore
-            new Date(machine.data.goLiveDate * 1000)
+          new Date(machine.data.goLiveDate * 1000)
           : 'N/A',
       );
     } catch (e) {
