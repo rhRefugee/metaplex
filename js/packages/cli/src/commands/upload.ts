@@ -150,7 +150,8 @@ async function writeIndices({
                 saveCache(cacheName, env, cache);
               } catch (err) {
                 log.error(
-                  `saving config line ${ind}-${keys[indexes[indexes.length - 1]]
+                  `saving config line ${ind}-${
+                    keys[indexes[indexes.length - 1]]
                   } failed`,
                   err,
                 );
@@ -167,9 +168,9 @@ async function writeIndices({
   }
 }
 
-function saveManifestsWithLink(cache, manifests, links) {
+function saveManifestsWithLink(cache, manifests, links, indices) {
   manifests.forEach((manifest, idx) => {
-    cache.items[idx] = {
+    cache.items[indices[idx]] = {
       link: links[idx],
       name: manifest.name,
       onChain: false,
@@ -210,16 +211,17 @@ export async function upload({
         JSON.parse(fs.readFileSync(jwk).toString()),
       );
 
-      const { updatedManifests, manifestLinks } = bundleUploads.reduce(
-        (acc, [bundleManifests, bundleLinks]) => {
+      const { updatedManifests, manifestLinks, indices } = bundleUploads.reduce(
+        (acc, [bundleManifests, bundleLinks, bundleIndices]) => {
           acc.updatedManifests.push(...bundleManifests);
           acc.manifestLinks.push(...bundleLinks);
+          acc.indices.push(...bundleIndices);
           return acc;
         },
-        { updatedManifests: [], manifestLinks: [] },
+        { updatedManifests: [], manifestLinks: [], indices: [] },
       );
 
-      saveManifestsWithLink(cache, updatedManifests, manifestLinks);
+      saveManifestsWithLink(cache, updatedManifests, manifestLinks, indices);
       saveCache(cacheName, env, cache);
     } else {
       for (const toUpload of needUpload) {
@@ -256,7 +258,7 @@ export async function upload({
     properties: { creators },
     seller_fee_basis_points: sellerFeeBasisPoints,
     symbol,
-  } = getItemManifest(dirname, needUpload[0]);
+  } = getItemManifest(dirname, 0);
 
   walletKeyPair = loadWalletKey(keypair);
   anchorProgram = await loadCandyProgram(walletKeyPair, env, rpcUrl);
@@ -264,16 +266,16 @@ export async function upload({
   const config = cachedProgram.config
     ? new PublicKey(cachedProgram.config)
     : await initConfig(anchorProgram, walletKeyPair, {
-      totalNFTs,
-      mutable,
-      retainAuthority,
-      sellerFeeBasisPoints,
-      symbol,
-      creators,
-      env,
-      cache,
-      cacheName,
-    });
+        totalNFTs,
+        mutable,
+        retainAuthority,
+        sellerFeeBasisPoints,
+        symbol,
+        creators,
+        env,
+        cache,
+        cacheName,
+      });
 
   return writeIndices({
     anchorProgram,

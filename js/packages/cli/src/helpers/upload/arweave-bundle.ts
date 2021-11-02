@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import Arweave from 'arweave';
 import { bundleAndSignData, createData, ArweaveSigner } from 'arbundles';
+import { EXTENSION_PNG } from '../constants';
 
 let _arweave;
 function getArweave() {
@@ -12,8 +13,7 @@ function getArweave() {
       port: 443,
       protocol: 'https',
       timeout: 20000,
-      logging: true,
-      logger: console.log,
+      logging: false,
     });
   return _arweave;
 }
@@ -69,7 +69,7 @@ function getUpdatedManifests(batch, dirname, imageLinks) {
     const manifest = JSON.parse(fs.readFileSync(manifestPath).toString());
     const imageLink = imageLinks[idx];
     manifest.image = imageLink;
-    manifest.properties.files = [{ type: 'image/png', src: imageLink }];
+    manifest.properties.files = [{ uri: imageLink, type: 'image/png' }];
 
     return manifest;
   });
@@ -80,7 +80,7 @@ function getManifestDataItems(signer, manifests) {
     ...baseTags,
     { name: 'Content-Type', value: 'application/json' },
   ];
-  const items = manifests.map((manifest, idx) => {
+  const items = manifests.map(manifest => {
     const data = JSON.stringify(manifest);
 
     return { data, tags };
@@ -107,12 +107,12 @@ export function arweaveBundleUpload(dirname, _items, jwk) {
 
   const items = _items.slice();
 
-  let batches = [];
+  const batches = [];
   while (items.length) {
     const range = getBatchRange(dirname, items);
     batches.push(items.splice(0, range));
   }
-
+  console.log(batches.length);
   return Promise.all(
     batches.map(async batch => {
       const imageLinks = await uploadBatchBundle(
@@ -128,8 +128,10 @@ export function arweaveBundleUpload(dirname, _items, jwk) {
         jwk,
         getManifestDataItems(signer, updatedManifests),
       );
-
-      return [updatedManifests, manifestLinks];
+      const indices = batch.map(image => {
+        return path.basename(image).replace(EXTENSION_PNG, '');
+      });
+      return [updatedManifests, manifestLinks, indices];
     }),
   );
 }
